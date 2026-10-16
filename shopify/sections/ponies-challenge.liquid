@@ -1,0 +1,166 @@
+{%- comment -%}
+  MYBIKE CREW – Ponies Wednesday Challenge
+  Renders the leaderboard from data.json (built by GitHub Actions).
+  Views (query params on the same page):
+    ?stage=YYYY-MM-DD   weekly stage (default: latest)
+    ?gt=YYYY-MM         monthly Grand Tour
+    ?rider=<athleteId>  rider history
+{%- endcomment -%}
+
+<div class="pwc" id="pwc-{{ section.id }}" data-src="{{ section.settings.data_url | escape }}">
+  <header class="pwc-head">
+    <p class="pwc-kicker">{{ section.settings.kicker | escape }}</p>
+    <h1 class="pwc-title">{{ section.settings.title | escape }}</h1>
+    <nav class="pwc-nav" aria-label="Challenge views">
+      <a href="?" data-view="stage">Weekly</a>
+      <a href="?gt=" data-view="gt">Grand Tour</a>
+    </nav>
+  </header>
+  <div class="pwc-body" aria-live="polite"><p class="pwc-muted">Loading results…</p></div>
+  <footer class="pwc-foot">
+    <p>Every Wednesday · efforts started 6:00–9:00 AM on the Strava segment
+      <a href="https://www.strava.com/segments/966059" target="_blank" rel="noopener">Griffith Park Hill Climb</a>.
+      Results update automatically.</p>
+    {%- if section.settings.contact_email != blank -%}
+      <p>Don't want to be listed? <a href="mailto:{{ section.settings.contact_email | escape }}?subject=Ponies%20Challenge%20%E2%80%93%20remove%20me">Ask us to remove you</a>.</p>
+    {%- endif -%}
+  </footer>
+</div>
+
+<style>
+  .pwc{--pwc-bg:#0f0f10;--pwc-fg:#f4f4f2;--pwc-muted:#9a9a96;--pwc-line:#2a2a2b;--pwc-accent:{{ section.settings.accent }};--pwc-gold:#f2c94c;
+    background:var(--pwc-bg);color:var(--pwc-fg);font-family:inherit;padding:40px 16px 56px;}
+  .pwc *{box-sizing:border-box}
+  .pwc a{color:inherit}
+  .pwc-head,.pwc-body,.pwc-foot{max-width:860px;margin:0 auto}
+  .pwc-kicker{margin:0 0 6px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--pwc-accent);font-weight:700}
+  .pwc-title{margin:0 0 20px;font-size:clamp(26px,5vw,40px);line-height:1.1;font-weight:800}
+  .pwc-nav{display:flex;gap:8px;border-bottom:1px solid var(--pwc-line);margin-bottom:24px}
+  .pwc-nav a{padding:10px 14px;text-decoration:none;color:var(--pwc-muted);font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .pwc-nav a[aria-current="page"]{color:var(--pwc-fg);border-color:var(--pwc-accent)}
+  .pwc-pager{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;font-size:14px}
+  .pwc-pager a{text-decoration:none;color:var(--pwc-muted)} .pwc-pager a:hover{color:var(--pwc-fg)}
+  .pwc-pager span.off{visibility:hidden}
+  .pwc-h2{font-size:22px;margin:0 0 4px;font-weight:800}
+  .pwc-sub{margin:0 0 18px;color:var(--pwc-muted);font-size:14px}
+  .pwc-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  .pwc-table th{text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--pwc-muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--pwc-line)}
+  .pwc-table td{padding:11px 6px;border-bottom:1px solid var(--pwc-line);font-size:15px}
+  .pwc-table .num{text-align:right;white-space:nowrap}
+  .pwc-table td.pos{width:44px;font-weight:700}
+  .pwc-table tr.p1 td.pos{color:var(--pwc-gold)}
+  .pwc-table td a{text-decoration:none} .pwc-table td a:hover{text-decoration:underline}
+  .pwc-muted{color:var(--pwc-muted)}
+  .pwc-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:0 0 24px}
+  .pwc-stat{border:1px solid var(--pwc-line);border-radius:10px;padding:12px}
+  .pwc-stat b{display:block;font-size:22px} .pwc-stat span{font-size:12px;color:var(--pwc-muted);text-transform:uppercase;letter-spacing:.06em}
+  .pwc-foot{margin-top:28px;font-size:13px;color:var(--pwc-muted)} .pwc-foot p{margin:4px 0}
+  @media (max-width:560px){.pwc-table .hide-sm{display:none}.pwc-table td{font-size:14px}}
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById('pwc-{{ section.id }}');
+  if (!root) return;
+  const body = root.querySelector('.pwc-body');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const t = (sec) => { const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60, p = (n) => String(n).padStart(2, '0'); return h ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`; };
+  const gap = (g) => g ? '+' + t(g) : '–';
+  const fmtDate = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const fmtMonth = (m) => new Date(m + '-15T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const ord = (n) => { const v = n % 100; return n + (v >= 11 && v <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th')); };
+  const link = (q) => '?' + new URLSearchParams(q).toString();
+  let D;
+
+  const riderLink = (id) => `<a href="${link({ rider: id })}">${esc(D.riders[id]?.name || 'Rider')}</a>`;
+  const pager = (prev, next, prevLabel, nextLabel) =>
+    `<div class="pwc-pager">${prev ? `<a href="${prev}">← ${prevLabel}</a>` : '<span class="off">←</span>'}${next ? `<a href="${next}">${nextLabel} →</a>` : '<span class="off">→</span>'}</div>`;
+
+  function navCurrent(view) {
+    root.querySelectorAll('.pwc-nav a').forEach((a) => {
+      if (a.dataset.view === view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+  }
+
+  function stageView(date) {
+    navCurrent('stage');
+    if (!D.stages.length) { body.innerHTML = '<p class="pwc-muted">No results yet. The first stage is next Wednesday.</p>'; return; }
+    const i = Math.max(0, D.stages.findIndex((s) => s.date === date));
+    const s = D.stages[i];
+    const newer = D.stages[i - 1], older = D.stages[i + 1];
+    const rows = s.results.map((r) => `<tr class="p${r.pos}"><td class="pos">${r.pos}</td><td>${riderLink(r.athleteId)}</td>
+      <td class="num hide-sm pwc-muted">${esc(r.start.slice(0, 5))}</td>
+      <td class="num"><a href="https://www.strava.com/activities/${esc(r.activityId)}" target="_blank" rel="noopener">${t(r.time)}</a></td>
+      <td class="num pwc-muted">${gap(r.gap)}</td></tr>`).join('');
+    body.innerHTML = pager(older && link({ stage: older.date }), newer && link({ stage: newer.date }), 'Previous week', 'Next week') +
+      `<h2 class="pwc-h2">Stage ${s.number} · ${fmtDate(s.date)}</h2>
+       <p class="pwc-sub">${esc(D.segment.name)} · ${D.segment.distanceKm} km · ${D.segment.avgGrade}% · ${s.results.length} riders</p>
+       ${s.results.length ? `<table class="pwc-table"><thead><tr><th>Pos</th><th>Rider</th><th class="num hide-sm">Start</th><th class="num">Time</th><th class="num">Gap</th></tr></thead><tbody>${rows}</tbody></table>`
+        : '<p class="pwc-muted">No results for this stage.</p>'}`;
+  }
+
+  function gtView(month) {
+    navCurrent('gt');
+    if (!D.grandTours.length) { body.innerHTML = '<p class="pwc-muted">No Grand Tour yet.</p>'; return; }
+    const i = Math.max(0, D.grandTours.findIndex((g) => g.month === month));
+    const g = D.grandTours[i];
+    const newer = D.grandTours[i - 1], older = D.grandTours[i + 1];
+    const stageLinks = g.stageDates.map((d) => `<a href="${link({ stage: d })}">${new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</a>`).join(' · ');
+    const rows = g.standings.map((r) => `<tr class="p${r.pos}"><td class="pos">${r.pos}</td><td>${riderLink(r.athleteId)}</td>
+      <td class="num">${t(r.total)}</td><td class="num pwc-muted">${gap(r.gap)}</td></tr>`).join('');
+    body.innerHTML = pager(older && link({ gt: older.month }), newer && link({ gt: newer.month }), 'Previous month', 'Next month') +
+      `<h2 class="pwc-h2">Grand Tour · ${fmtMonth(g.month)}</h2>
+       <p class="pwc-sub">${g.stageDates.length} stage${g.stageDates.length > 1 ? 's' : ''}: ${stageLinks}<br>
+       Times are summed across every stage of the month. Only riders who finished every stage qualify. Lowest total wins.</p>
+       ${g.standings.length ? `<table class="pwc-table"><thead><tr><th>Pos</th><th>Rider</th><th class="num">Total</th><th class="num">Gap</th></tr></thead><tbody>${rows}</tbody></table>`
+        : '<p class="pwc-muted">Nobody has completed every stage yet.</p>'}`;
+  }
+
+  function riderView(id) {
+    navCurrent('');
+    const p = D.riders[id];
+    if (!p) { body.innerHTML = '<p class="pwc-muted">Rider not found.</p>'; return; }
+    const rows = p.history.map((h) => `<tr class="p${h.pos}"><td><a href="${link({ stage: h.date })}">Stage ${h.number}</a>
+      <span class="pwc-muted hide-sm"> · ${new Date(h.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span></td>
+      <td class="num">${ord(h.pos)} <span class="pwc-muted">/ ${h.field}</span></td>
+      <td class="num"><a href="https://www.strava.com/activities/${esc(h.activityId)}" target="_blank" rel="noopener">${t(h.time)}</a></td></tr>`).join('');
+    const gts = (p.grandTours || []).map((g) => `<a href="${link({ gt: g.month })}">${fmtMonth(g.month)}: ${ord(g.pos)}</a>`).join(' · ');
+    body.innerHTML = `<h2 class="pwc-h2">${esc(p.name)}</h2>
+      <p class="pwc-sub">${gts ? 'Grand Tour: ' + gts : 'No completed Grand Tour yet.'}</p>
+      <div class="pwc-stats">
+        <div class="pwc-stat"><b>${p.rides}</b><span>Rides</span></div>
+        <div class="pwc-stat"><b>${ord(p.bestPos)}</b><span>Best</span></div>
+        <div class="pwc-stat"><b>${p.avgPos}</b><span>Avg pos</span></div>
+        <div class="pwc-stat"><b>${p.podiums}</b><span>Podiums</span></div>
+        <div class="pwc-stat"><b>${t(p.bestTime)}</b><span>Best time</span></div>
+      </div>
+      <table class="pwc-table"><thead><tr><th>Stage</th><th class="num">Place</th><th class="num">Time</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  function render() {
+    const q = new URLSearchParams(location.search);
+    if (q.has('rider')) riderView(q.get('rider'));
+    else if (q.has('gt')) gtView(q.get('gt'));
+    else stageView(q.get('stage'));
+  }
+
+  fetch(root.dataset.src, { cache: 'no-cache' })
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then((d) => { D = d; render(); })
+    .catch(() => { body.innerHTML = '<p class="pwc-muted">Results are temporarily unavailable. Please try again later.</p>'; });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Ponies Challenge",
+  "settings": [
+    { "type": "text", "id": "kicker", "label": "Kicker", "default": "MYBIKE CREW" },
+    { "type": "text", "id": "title", "label": "Title", "default": "Ponies Wednesday Challenge" },
+    { "type": "url", "id": "data_url", "label": "Results data URL (data.json on GitHub Pages)" },
+    { "type": "text", "id": "contact_email", "label": "Email for removal requests" },
+    { "type": "color", "id": "accent", "label": "Accent color", "default": "#e4002b" }
+  ],
+  "presets": [{ "name": "Ponies Challenge" }]
+}
+{% endschema %}

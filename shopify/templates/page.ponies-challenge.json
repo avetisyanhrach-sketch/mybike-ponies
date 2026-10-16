@@ -1,0 +1,9 @@
+{
+  "sections": {
+    "main": {
+      "type": "ponies-challenge",
+      "settings": {}
+    }
+  },
+  "order": ["main"]
+}

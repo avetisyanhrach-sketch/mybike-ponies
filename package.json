@@ -1,0 +1,12 @@
+{
+  "name": "ponies-challenge",
+  "private": true,
+  "type": "module",
+  "description": "MYBIKE CREW – Ponies Wednesday Challenge leaderboard for mybike.la",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "collect": "node scripts/collect.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node test/run.mjs"
+  }
+}
